@@ -131,47 +131,91 @@ export class TextProcessor {
                 // 尝试多种方式提取JSON
                 let jsonStr = null;
                 
-                // 方法1: 寻找```json```块
-                const codeBlockMatch = content.match(/```(?:json)?([\s\S]*?)```/);
-                if (codeBlockMatch) {
-                    jsonStr = codeBlockMatch[1].trim();
-                    console.log('从代码块中提取JSON成功');
+                // 方法1: 检查整个响应是否是有效JSON
+                if (content.trim().startsWith('{') && content.trim().endsWith('}')) {
+                    try {
+                        const parsedData = JSON.parse(content.trim());
+                        if (parsedData && typeof parsedData === 'object') {
+                            jsonStr = content.trim();
+                            console.log('整个响应是有效的JSON对象');
+                        }
+                    } catch (e) {
+                        console.log('整个响应不是有效JSON，尝试其他提取方法');
+                    }
                 }
                 
-                // 方法2: 尝试查找完整的JSON对象
+                // 方法2: 寻找```json```块
+                if (!jsonStr) {
+                    const codeBlockMatch = content.match(/```(?:json)?([\s\S]*?)```/);
+                    if (codeBlockMatch) {
+                        try {
+                            const cleanBlock = codeBlockMatch[1].trim();
+                            JSON.parse(cleanBlock);
+                            jsonStr = cleanBlock;
+                            console.log('从代码块中提取JSON成功');
+                        } catch (e) {
+                            console.log('代码块不是有效JSON');
+                        }
+                    }
+                }
+                
+                // 方法3: 尝试查找完整的JSON对象
                 if (!jsonStr) {
                     // 寻找最外层的大括号包含的内容
                     const jsonObjectMatch = content.match(/\{([\s\S]*?)\}(?=[^{}]*$)/);
                     if (jsonObjectMatch) {
-                        jsonStr = '{' + jsonObjectMatch[1] + '}';
-                        console.log('从内容中提取完整JSON对象成功');
+                        try {
+                            const fullJson = '{' + jsonObjectMatch[1] + '}';
+                            JSON.parse(fullJson);
+                            jsonStr = fullJson;
+                            console.log('从内容中提取完整JSON对象成功');
+                        } catch (e) {
+                            console.log('提取的JSON对象无效');
+                        }
                     }
-                }
-                
-                // 方法3: 尝试将整个内容解析为JSON
-                if (!jsonStr && content.trim().startsWith('{') && content.trim().endsWith('}')) {
-                    jsonStr = content.trim();
-                    console.log('使用完整内容作为JSON');
                 }
                 
                 // 如果找到了JSON字符串，尝试清理和解析
                 if (jsonStr) {
-                    // 清理JSON字符串，移除不必要的引号和转义
+                    // 清理JSON字符串，移除不必要的字符和转义
                     jsonStr = jsonStr.replace(/\\n/g, '\n')
-                                     .replace(/\\\//g, '/');
+                                    .replace(/\\\/g, '/')
+                                    .replace(/\r/g, '') // 移除回车符
+                                    .replace(/\t/g, ' '); // 制表符替换为空格
+                    
+                    // 尝试修复常见JSON格式问题
+                    jsonStr = jsonStr.replace(/,\s*\}/g, '}') // 移除对象末尾的逗号
+                                    .replace(/,\s*\]/g, ']'); // 移除数组末尾的逗号
                                      
                     console.log(`尝试解析JSON: ${jsonStr.substring(0, 50)}...`);
+                    
                     try {
                         wordData = JSON.parse(jsonStr);
                         console.log('JSON解析成功');
                     } catch (parseError) {
-                        console.error(`JSON解析失败: ${parseError.message}, 尝试其他方法`);
-                        throw parseError; // 将错误传递给外层catch块
+                        console.error(`JSON解析失败: ${parseError.message}，尝试修复后再解析`);
+                        
+                        // 最后尝试一些常见的修复方法
+                        try {
+                            // 移除不可见字符
+                            const fixedJson = jsonStr.replace(/[\u0000-\u001F]/g, '');
+                            wordData = JSON.parse(fixedJson);
+                            console.log('修复后JSON解析成功');
+                        } catch (finalError) {
+                            console.error('所有JSON解析方法都失败，回退到文本处理模式');
+                            throw finalError;
+                        }
                     }
                 } else {
                     // 没有找到JSON
                     console.warn(`未找到词汇 ${word} 的JSON格式，回退到文本处理...`);
                     throw new Error('未找到有效的JSON格式');
+                }
+                
+                // 验证JSON数据的有效性
+                if (!wordData || !wordData.modes) {
+                    console.warn(`词汇 ${word} 的JSON数据结构无效，回退到文本处理...`);
+                    throw new Error('JSON数据结构无效');
                 }
                 
                 // 从JSON生成HTML
@@ -290,74 +334,69 @@ export class TextProcessor {
      * @returns {string} 提示词
      */
     getTriModePromptForJson(word) {
-        return `
-        请为学术词汇"${word}"创建一个结构化的JSON格式词条，包含三种不同的展示模式。
-        只返回格式正确的JSON数据，不要添加任何解释或思考过程。
-        确保JSON格式完全正确，避免任何格式错误。格式必须完全匹配以下结构：
-        
-        {
-          "word": "${word}",
-          "modes": {
-            "professional": {
-              "title": "${word}",
-              "definition": "详细的学术定义",
-              "pronunciation": "音标",
-              "academicUsage": ["学术例句1", "学术例句2", "学术例句3"],
-              "everydayUse": ["日常例句1", "日常例句2"],
-              "associatedVocabulary": ["相关词汇1", "相关词汇2", "相关词汇3"],
-              "grammar": ["语法点1", "语法点2"],
-              "collocations": {
-                "搭配类型1": "搭配词组",
-                "搭配类型2": "搭配词组"
-              },
-              "synonyms": [
-                {"word": "同义词1", "explanation": "简短解释"},
-                {"word": "同义词2", "explanation": "简短解释"}
-              ],
-              "antonyms": [
-                {"word": "反义词1", "explanation": "简短解释"}
-              ]
-            },
-            "intermediate": {
-              "title": "${word}",
-              "definition": "中文简明释义",
-              "pronunciation": "音标",
-              "academicUsage": ["英文例句1", "英文例句2"],
-              "everydayUse": ["英文例句1", "英文例句2"],
-              "associatedVocabulary": [{"en": "英文词1", "zh": "中文释义1"}, {"en": "英文词2", "zh": "中文释义2"}],
-              "grammar": ["语法点1", "语法点2"],
-              "collocations": {
-                "搭配类型1": "搭配词组",
-                "搭配类型2": "搭配词组"
-              },
-              "synonyms": [
-                {"word": "同义词1", "explanation": "中文解释"},
-                {"word": "同义词2", "explanation": "中文解释"}
-              ]
-            },
-            "elementary": {
-              "title": "${word}",
-              "definition": "非常简单的中文解释",
-              "pronunciation": "简化的发音指导",
-              "usage": ["简单例句1", "简单例句2", "简单例句3"],
-              "relatedWords": "简单相关词汇",
-              "tips": "简单记忆方法",
-              "similarWords": [
-                {"word": "简单同义词1", "explanation": "简单解释"},
-                {"word": "简单同义词2", "explanation": "简单解释"}
-              ]
-            }
-          }
-        }
-        
-        重要提示：
-        1. 必须保持严格的JSON格式，确保所有逗号、引号和括号正确。
-        2. 字符串值必须用双引号包围，不要使用单引号。
-        3. 不要在JSON数据前后添加任何说明文字或代码块标记，直接返回纯JSON。
-        4. 确保所有字段名称准确一致，大小写与示例完全匹配。
-        5. 提供真实有用的内容，不要使用占位符。
-        6. 所有引号、括号和特殊字符必须正确转义。
-        `;
+        return `你是一个结构化数据生成工具。请为学术词汇"${word}"创建一个JSON格式词条，包含三种展示模式。
+
+严格按照以下规则：
+1. 只输出JSON数据，不要添加任何解释、前言或思考过程
+2. 不要使用代码块标记(\`\`\`)，直接返回纯JSON对象
+3. 所有字段名称必须与示例完全匹配，包括大小写
+4. 所有内容必须提供真实有用的信息，不要使用示例占位符
+
+以下是必须遵循的JSON结构：
+{
+  "word": "${word}",
+  "modes": {
+    "professional": {
+      "title": "${word}",
+      "definition": "详细的学术定义",
+      "pronunciation": "音标",
+      "academicUsage": ["学术例句1", "学术例句2", "学术例句3"],
+      "everydayUse": ["日常例句1", "日常例句2"],
+      "associatedVocabulary": ["相关词汇1", "相关词汇2", "相关词汇3"],
+      "grammar": ["语法点1", "语法点2"],
+      "collocations": {
+        "搭配类型1": "搭配词组",
+        "搭配类型2": "搭配词组"
+      },
+      "synonyms": [
+        {"word": "同义词1", "explanation": "简短解释"},
+        {"word": "同义词2", "explanation": "简短解释"}
+      ],
+      "antonyms": [
+        {"word": "反义词1", "explanation": "简短解释"}
+      ]
+    },
+    "intermediate": {
+      "title": "${word}",
+      "definition": "中文简明释义",
+      "pronunciation": "音标",
+      "academicUsage": ["英文例句1", "英文例句2"],
+      "everydayUse": ["英文例句1", "英文例句2"],
+      "associatedVocabulary": [{"en": "英文词1", "zh": "中文释义1"}, {"en": "英文词2", "zh": "中文释义2"}],
+      "grammar": ["语法点1", "语法点2"],
+      "collocations": {
+        "搭配类型1": "搭配词组",
+        "搭配类型2": "搭配词组"
+      },
+      "synonyms": [
+        {"word": "同义词1", "explanation": "中文解释"},
+        {"word": "同义词2", "explanation": "中文解释"}
+      ]
+    },
+    "elementary": {
+      "title": "${word}",
+      "definition": "非常简单的中文解释",
+      "pronunciation": "简化的发音指导",
+      "usage": ["简单例句1", "简单例句2", "简单例句3"],
+      "relatedWords": "简单相关词汇",
+      "tips": "简单记忆方法",
+      "similarWords": [
+        {"word": "简单同义词1", "explanation": "简单解释"},
+        {"word": "简单同义词2", "explanation": "简单解释"}
+      ]
+    }
+  }
+}`;
     }
     
     /**
