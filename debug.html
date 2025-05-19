@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>词条调试 - 学术词汇助手</title>
+    <style>
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #212529;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: #0d6efd;
+        }
+        
+        .instructions {
+            max-width: 800px;
+            margin: 0 auto 30px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+        
+        .btn-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn:hover {
+            background-color: #0b5ed7;
+        }
+        
+        #result-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .word-tabs {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            padding: 20px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>词条内容调试工具</h1>
+    </header>
+    
+    <div class="instructions">
+        <h2>使用说明</h2>
+        <p>此工具用于直接从浏览器的localStorage中读取和显示词条内容，帮助调试可能的数据格式问题。</p>
+        <p>点击下方按钮查看「driver」词条的完整内容：</p>
+    </div>
+    
+    <div class="btn-container">
+        <button id="view-driver" class="btn">查看 driver 词条内容</button>
+    </div>
+    
+    <div id="result-container"></div>
+
+    <script>
+        // 点击按钮时加载调试脚本
+        document.getElementById('view-driver').addEventListener('click', function() {
+            const script = document.createElement('script');
+            script.src = './js/debug_helper.js';
+            script.type = 'module';
+            document.body.appendChild(script);
+            
+            this.disabled = true;
+            this.textContent = '正在加载...';
+        });
+    </script>
+</body>
+</html>
