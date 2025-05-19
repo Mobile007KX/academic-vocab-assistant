@@ -210,6 +210,9 @@ class App {
         // 处理按钮点击
         document.getElementById('processButton').addEventListener('click', () => this.startProcessing());
         
+        // 测试日志按钮
+        document.getElementById('testLog').addEventListener('click', () => this.addTestLogs());
+        
         // 清空输入按钮
         document.getElementById('clearInput').addEventListener('click', () => this.clearInput());
         

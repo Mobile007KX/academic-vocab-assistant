@@ -185,21 +185,16 @@ export class LLMService {
         try {
             // 如果尚未测试连接，先测试
             if (!this.connectionTested) {
-                LLMLogger.info(`尚未测试连接，先进行连接测试...`);
+                console.log(`尚未测试连接，先进行连接测试...`);
                 const connected = await this.testConnection();
                 if (!connected) {
                     const errorMsg = '无法连接到Ollama API，请检查服务是否启动';
-                    LLMLogger.error(errorMsg);
+                    console.error(errorMsg);
                     throw new Error(errorMsg);
                 }
             }
             
-            LLMLogger.info(`向模型 ${this.model} 发送查询...`);
-            
-            // 记录提示的前50个字符（避免日志区域过于臃肿）
-            const truncatedPrompt = prompt.length > 50 ? 
-                `${prompt.substring(0, 50)}... (${prompt.length}字符)` : prompt;
-            LLMLogger.info(`提示内容: ${truncatedPrompt}`);
+            console.log(`向模型 ${this.model} 发送查询...`);
             
             // 构建正确的API端点
             const generateEndpoint = `${this.apiEndpoint}/api/generate`;
@@ -210,10 +205,9 @@ export class LLMService {
                 stream: false
             };
             
-            LLMLogger.info(`发送请求到: ${generateEndpoint}`);
+            console.log(`发送请求到: ${generateEndpoint}`);
             const startTime = Date.now();
             
-            LLMLogger.info(`正在等待模型响应...这可能需要几秒到几十秒不等`);
             const response = await fetch(generateEndpoint, {
                 method: 'POST',
                 headers: {
@@ -229,33 +223,33 @@ export class LLMService {
             if (!response.ok) {
                 const errorText = await response.text().catch(() => '');
                 const errorMsg = `API请求失败: ${response.status} ${response.statusText} ${errorText}`;
-                LLMLogger.error(errorMsg);
+                console.error(errorMsg);
                 throw new Error(errorMsg);
             }
             
-            LLMLogger.info(`收到响应 - 处理响应数据中...`);
+            console.log(`收到响应 - 处理响应数据中...`);
             const data = await response.json();
             const content = data.response || '';
             
             if (!content) {
                 const errorMsg = 'API返回的内容为空';
-                LLMLogger.error(errorMsg);
+                console.error(errorMsg);
                 throw new Error(errorMsg);
             }
             
             // 记录耗时和响应的前50个字符
             const truncatedContent = content.substring(0, 50) + 
                 (content.length > 50 ? `... (${content.length}字符)` : '');
-            LLMLogger.success(`获取到响应 (耗时${duration.toFixed(2)}秒): ${truncatedContent}`);
+            console.log(`获取到响应 (耗时${duration.toFixed(2)}秒): ${truncatedContent}`);
             
             if (duration > 30) {
-                LLMLogger.warning(`响应时间较长 (${duration.toFixed(2)}秒)，可能需要检查Ollama性能或配置`);
+                console.warn(`响应时间较长 (${duration.toFixed(2)}秒)，可能需要检查Ollama性能或配置`);
             }
             
             return content;
             
         } catch (error) {
-            LLMLogger.error(`查询LLM失败: ${error.message}`);
+            console.error(`查询LLM失败: ${error.message}`);
             throw error;
         }
     }

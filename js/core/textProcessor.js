@@ -116,7 +116,7 @@ export class TextProcessor {
     async processWord(word) {
         try {
             // 发送请求获取词汇的三模式内容
-            const prompt = this.getTriModePromptForJson(word);
+            const prompt = this.getSimplifiedPrompt(word);
             const content = await this.llmService.query(prompt);
             
             if (!content) {
@@ -179,7 +179,7 @@ export class TextProcessor {
                 if (jsonStr) {
                     // 清理JSON字符串，移除不必要的字符和转义
                     jsonStr = jsonStr.replace(/\\n/g, '\n')
-                                    .replace(/\\\/g, '/')
+                                    .replace(/\\\\/g, '/')
                                     .replace(/\r/g, '') // 移除回车符
                                     .replace(/\t/g, ' '); // 制表符替换为空格
                     
@@ -244,6 +244,52 @@ export class TextProcessor {
             console.error(`处理词汇 ${word} 失败:`, error);
             throw error;
         }
+    }
+    
+    /**
+     * 获取简化的提示词，避免复杂JSON结构导致错误
+     */
+    getSimplifiedPrompt(word) {
+        return `为词汇"${word}"创建三模式词典条目，以简单JSON格式返回。只返回JSON，不要解释或使用代码块。
+
+格式：
+{
+  "word": "${word}",
+  "modes": {
+    "professional": {
+      "title": "${word}",
+      "definition": "英文学术定义",
+      "pronunciation": "音标",
+      "academicUsage": ["学术例句"],
+      "everydayUse": ["日常例句"],
+      "associatedVocabulary": ["相关词汇"],
+      "grammar": ["语法点"],
+      "collocations": {"搭配类型": "搭配词组"},
+      "synonyms": [{"word": "同义词", "explanation": "解释"}],
+      "antonyms": [{"word": "反义词", "explanation": "解释"}]
+    },
+    "intermediate": {
+      "title": "${word}",
+      "definition": "中文释义",
+      "pronunciation": "发音",
+      "academicUsage": ["学术例句"],
+      "everydayUse": ["日常例句"],
+      "associatedVocabulary": [{"en": "英文词", "zh": "中文释义"}],
+      "grammar": ["语法点"],
+      "collocations": {"搭配类型": "搭配词组"},
+      "synonyms": [{"word": "同义词", "explanation": "解释"}]
+    },
+    "elementary": {
+      "title": "${word}",
+      "definition": "简单中文解释",
+      "pronunciation": "简化发音",
+      "usage": ["简单例句"],
+      "relatedWords": "相关词汇",
+      "tips": "记忆方法",
+      "similarWords": [{"word": "简单同义词", "explanation": "解释"}]
+    }
+  }
+}`;
     }
     
     /**
@@ -326,77 +372,6 @@ export class TextProcessor {
 
         请确保严格遵循上述格式，使用emoji标识各部分，并保持三种模式的内容相互独立且完整。
         `;
-    }
-    
-    /**
-     * 获取生成JSON格式的三模式提示词
-     * @param {string} word - 词汇
-     * @returns {string} 提示词
-     */
-    getTriModePromptForJson(word) {
-        return `你是一个结构化数据生成工具。请为学术词汇"${word}"创建一个JSON格式词条，包含三种展示模式。
-
-严格按照以下规则：
-1. 只输出JSON数据，不要添加任何解释、前言或思考过程
-2. 不要使用代码块标记(\`\`\`)，直接返回纯JSON对象
-3. 所有字段名称必须与示例完全匹配，包括大小写
-4. 所有内容必须提供真实有用的信息，不要使用示例占位符
-
-以下是必须遵循的JSON结构：
-{
-  "word": "${word}",
-  "modes": {
-    "professional": {
-      "title": "${word}",
-      "definition": "详细的学术定义",
-      "pronunciation": "音标",
-      "academicUsage": ["学术例句1", "学术例句2", "学术例句3"],
-      "everydayUse": ["日常例句1", "日常例句2"],
-      "associatedVocabulary": ["相关词汇1", "相关词汇2", "相关词汇3"],
-      "grammar": ["语法点1", "语法点2"],
-      "collocations": {
-        "搭配类型1": "搭配词组",
-        "搭配类型2": "搭配词组"
-      },
-      "synonyms": [
-        {"word": "同义词1", "explanation": "简短解释"},
-        {"word": "同义词2", "explanation": "简短解释"}
-      ],
-      "antonyms": [
-        {"word": "反义词1", "explanation": "简短解释"}
-      ]
-    },
-    "intermediate": {
-      "title": "${word}",
-      "definition": "中文简明释义",
-      "pronunciation": "音标",
-      "academicUsage": ["英文例句1", "英文例句2"],
-      "everydayUse": ["英文例句1", "英文例句2"],
-      "associatedVocabulary": [{"en": "英文词1", "zh": "中文释义1"}, {"en": "英文词2", "zh": "中文释义2"}],
-      "grammar": ["语法点1", "语法点2"],
-      "collocations": {
-        "搭配类型1": "搭配词组",
-        "搭配类型2": "搭配词组"
-      },
-      "synonyms": [
-        {"word": "同义词1", "explanation": "中文解释"},
-        {"word": "同义词2", "explanation": "中文解释"}
-      ]
-    },
-    "elementary": {
-      "title": "${word}",
-      "definition": "非常简单的中文解释",
-      "pronunciation": "简化的发音指导",
-      "usage": ["简单例句1", "简单例句2", "简单例句3"],
-      "relatedWords": "简单相关词汇",
-      "tips": "简单记忆方法",
-      "similarWords": [
-        {"word": "简单同义词1", "explanation": "简单解释"},
-        {"word": "简单同义词2", "explanation": "简单解释"}
-      ]
-    }
-  }
-}`;
     }
     
     /**
