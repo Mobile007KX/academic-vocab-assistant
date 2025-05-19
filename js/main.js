@@ -84,14 +84,62 @@ class App {
             // 从本地存储获取设置
             const apiEndpoint = this.storageManager.getSetting('apiEndpoint', 'http://localhost:11434/api/chat');
             const modelName = this.storageManager.getSetting('modelName', 'qwen3:8b');
+            const verboseLogging = this.storageManager.getSetting('verboseLogging', false);
             
-            // 更新UI
-            document.getElementById('apiEndpoint').value = apiEndpoint;
-            document.getElementById('modelName').value = modelName;
+            // 更新API端点选择器
+            const apiSelect = document.getElementById('apiEndpoint');
+            
+            // 检查是否是标准选项之一
+            if (apiEndpoint === 'http://localhost:11434/api/chat' || 
+                apiEndpoint === 'http://localhost:11434/api/generate') {
+                apiSelect.value = apiEndpoint;
+            } else {
+                // 如果是自定义端点，添加一个新选项
+                const customOption = document.createElement('option');
+                customOption.value = apiEndpoint;
+                customOption.textContent = '自定义API: ' + apiEndpoint;
+                apiSelect.add(customOption);
+                apiSelect.value = apiEndpoint;
+            }
+            
+            // 更新模型选择器
+            const modelSelect = document.getElementById('modelName');
+            const customModelInput = document.getElementById('customModel');
+            const customModelContainer = document.getElementById('customModelContainer');
+            
+            // 检查是否是预设模型之一
+            const presetModels = ['qwen3:8b', 'llama3.2:latest', 'llama3:8b', 'gemma:7b'];
+            if (presetModels.includes(modelName)) {
+                modelSelect.value = modelName;
+                customModelContainer.classList.add('d-none');
+            } else {
+                // 如果是自定义模型
+                modelSelect.value = 'other';
+                customModelInput.value = modelName;
+                customModelContainer.classList.remove('d-none');
+            }
+            
+            // 设置详细日志选项
+            if (document.getElementById('verboseLogging')) {
+                document.getElementById('verboseLogging').checked = verboseLogging;
+            }
+            
+            // 绑定自定义模型输入框显示逻辑
+            modelSelect.addEventListener('change', () => {
+                if (modelSelect.value === 'other') {
+                    customModelContainer.classList.remove('d-none');
+                    // 将焦点放在自定义模型输入框上
+                    setTimeout(() => customModelInput.focus(), 50);
+                } else {
+                    customModelContainer.classList.add('d-none');
+                }
+            });
             
             // 设置到服务
             this.llmService.setApiEndpoint(apiEndpoint);
             this.llmService.setModel(modelName);
+            
+            console.log('LLM设置加载完成:', { apiEndpoint, modelName, verboseLogging });
         } catch (error) {
             console.error('加载LLM设置失败:', error);
         }
@@ -102,23 +150,50 @@ class App {
      */
     saveLlmSettings() {
         try {
+            // 获取API端点值
             const apiEndpoint = document.getElementById('apiEndpoint').value.trim();
-            const modelName = document.getElementById('modelName').value.trim();
             
-            if (!apiEndpoint || !modelName) {
-                showToast('API地址和模型名称不能为空', 'error');
+            // 获取模型名称 - 需要检查是否是自定义模型
+            let modelName = document.getElementById('modelName').value.trim();
+            if (modelName === 'other') {
+                modelName = document.getElementById('customModel').value.trim();
+                if (!modelName) {
+                    showToast('自定义模型名称不能为空', 'error');
+                    document.getElementById('customModel').focus();
+                    return;
+                }
+            }
+            
+            // 获取详细日志设置
+            const verboseLogging = document.getElementById('verboseLogging')?.checked || false;
+            
+            // 验证输入
+            if (!apiEndpoint) {
+                showToast('API地址不能为空', 'error');
                 return;
             }
+            
+            if (!apiEndpoint.includes('localhost') && !apiEndpoint.startsWith('http')) {
+                if (!confirm('API地址不包含localhost或http，确定使用此地址？')) {
+                    return;
+                }
+            }
+            
+            // 构建更友好的设置显示
+            let successText = `设置已保存: ${modelName}`;
             
             // 保存到本地存储
             this.storageManager.setSetting('apiEndpoint', apiEndpoint);
             this.storageManager.setSetting('modelName', modelName);
+            this.storageManager.setSetting('verboseLogging', verboseLogging);
             
             // 设置到服务
             this.llmService.setApiEndpoint(apiEndpoint);
             this.llmService.setModel(modelName);
             
-            showToast('LLM设置已保存', 'success');
+            // 显示保存成功提示
+            showToast(successText, 'success');
+            console.log('LLM设置已保存:', { apiEndpoint, modelName, verboseLogging });
             
             // 测试新的连接
             this.testLLMConnection();
@@ -692,42 +767,85 @@ class App {
         try {
             // 查找或创建状态元素
             const llmStatusEl = document.getElementById('llmStatus');
-            let llmConnectionStatus = document.getElementById('llmConnectionStatus');
-            if (!llmConnectionStatus) {
-                llmConnectionStatus = document.createElement('small');
-                llmConnectionStatus.id = 'llmConnectionStatus';
-                // 添加到状态容器内
-                const container = document.querySelector('.llm-status-container');
-                if (container) {
-                    container.appendChild(llmConnectionStatus);
-                } else {
-                    // 如果找不到容器，作为备用添加到状态指示器后面
-                    llmStatusEl.parentNode.appendChild(llmConnectionStatus);
-                }
+            let llmConnectionContainer = document.querySelector('.llm-status-container');
+            
+            // 如果状态容器不存在，创建一个
+            if (!llmConnectionContainer) {
+                console.warn('未找到LLM状态容器，这是不正常的');
+                return;
             }
+            
+            // 清除现有的连接状态信息
+            const existingStatus = document.getElementById('llmConnectionStatus');
+            if (existingStatus) {
+                existingStatus.remove();
+            }
+            
+            // 创建新的状态信息元素
+            const statusInfo = document.createElement('div');
+            statusInfo.id = 'llmConnectionStatus';
+            statusInfo.className = 'd-block mt-2';
+            
+            // 创建连接信息区
+            const connectionInfo = document.createElement('div');
+            connectionInfo.className = 'llm-connection-info';
+            
+            // 创建状态图标
+            const statusIcon = document.createElement('span');
+            statusIcon.className = 'status-icon bi bi-hourglass-split';
+            connectionInfo.appendChild(statusIcon);
+            
+            // 创建状态文本
+            const statusText = document.createElement('span');
+            statusText.className = 'status-text';
+            statusText.textContent = '正在测试LLM连接...';
+            connectionInfo.appendChild(statusText);
+            
+            // 添加到状态信息元素
+            statusInfo.appendChild(connectionInfo);
+            
+            // 创建进度条
+            const progressBar = document.createElement('div');
+            progressBar.className = 'llm-test-progress';
+            progressBar.innerHTML = '<div class="progress-inner"></div>';
+            statusInfo.appendChild(progressBar);
+            
+            // 添加到容器
+            llmConnectionContainer.appendChild(statusInfo);
             
             // 更新状态显示为测试中
             llmStatusEl.className = 'badge bg-warning';
-            llmStatusEl.textContent = '正在连接...';
-            llmConnectionStatus.className = 'text-muted d-block mt-2';
-            llmConnectionStatus.textContent = '正在测试LLM连接...';
+            llmStatusEl.textContent = '正在测试...';
             
             // 保持底部状态区域的通用就绪状态
             document.getElementById('progressStatus').textContent = '准备就绪，等待处理...';
             
-            // 暂停一下，让UI状态更新显示出来
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // 添加进度条动画
+            const progressInner = progressBar.querySelector('.progress-inner');
+            progressInner.style.width = '30%';
+            setTimeout(() => { progressInner.style.width = '60%'; }, 500);
             
             // 测试连接
             const connected = await this.llmService.testConnection();
+            
+            // 更新进度条到90%
+            progressInner.style.width = '90%';
             
             if (connected) {
                 // 更新状态显示为已连接
                 llmStatusEl.className = 'badge bg-success';
                 llmStatusEl.textContent = '已连接';
-                llmConnectionStatus.textContent = `已成功连接到 ${this.llmService.model} 模型`;
-                llmConnectionStatus.className = 'text-success d-block mt-2';
+                
+                // 更新连接信息
+                statusIcon.className = 'status-icon bi bi-check-circle-fill text-success';
+                statusText.textContent = `已连接到 ${this.llmService.model}`;
+                statusText.className = 'text-success';
+                
                 console.log('LLM连接测试成功');
+                
+                // 完成进度条
+                progressInner.style.width = '100%';
+                setTimeout(() => { progressBar.style.opacity = '0'; }, 800);
                 
                 // 添加一个简单的模型测试，确保返回格式正确
                 this.testLLMFormatting();
@@ -735,9 +853,30 @@ class App {
                 // 更新状态显示为未连接
                 llmStatusEl.className = 'badge bg-danger';
                 llmStatusEl.textContent = '未连接';
-                llmConnectionStatus.textContent = 'LLM连接失败，请确保本地Ollama服务已启动';
-                llmConnectionStatus.className = 'text-danger d-block mt-2';
-                showToast('无法连接到LLM服务。请确保本地Ollama服务已启动并运行在http://localhost:11434', 'error');
+                
+                // 更新连接信息
+                statusIcon.className = 'status-icon bi bi-exclamation-triangle-fill text-danger';
+                statusText.textContent = 'LLM连接失败，请确保本地Ollama服务已启动';
+                statusText.className = 'text-danger';
+                
+                // 添加故障排除提示
+                const troubleshootingTips = document.createElement('div');
+                troubleshootingTips.className = 'mt-2 small text-muted';
+                troubleshootingTips.innerHTML = `
+                    <p>解决方法:</p>
+                    <ol class="ps-3 mb-0">
+                        <li>确保Ollama已安装并启动 <code>ollama serve</code></li>
+                        <li>检查<a href="#" class="text-reset text-decoration-underline" data-bs-toggle="collapse" data-bs-target="#llmSettingsPanel">LLM设置</a>是否正确</li>
+                        <li>尝试使用已安装的其他模型</li>
+                    </ol>
+                `;
+                statusInfo.appendChild(troubleshootingTips);
+                
+                // 停止进度条
+                progressInner.style.width = '30%';
+                progressInner.style.backgroundColor = '#dc3545';
+                
+                showToast('无法连接到LLM服务。请确保本地Ollama服务已启动', 'error');
                 console.log('LLM连接测试失败');
             }
         } catch (error) {
@@ -747,19 +886,51 @@ class App {
             llmStatusEl.textContent = '连接错误';
             
             // 更新连接状态提示
-            let llmConnectionStatus = document.getElementById('llmConnectionStatus');
-            if (!llmConnectionStatus) {
-                llmConnectionStatus = document.createElement('small');
-                llmConnectionStatus.id = 'llmConnectionStatus';
+            let statusInfo = document.getElementById('llmConnectionStatus');
+            if (!statusInfo) {
+                statusInfo = document.createElement('div');
+                statusInfo.id = 'llmConnectionStatus';
+                statusInfo.className = 'd-block mt-2';
+                
                 const container = document.querySelector('.llm-status-container');
                 if (container) {
-                    container.appendChild(llmConnectionStatus);
+                    container.appendChild(statusInfo);
                 } else {
-                    llmStatusEl.parentNode.appendChild(llmConnectionStatus);
+                    llmStatusEl.parentNode.appendChild(statusInfo);
                 }
             }
-            llmConnectionStatus.textContent = `连接错误: ${error.message}`;
-            llmConnectionStatus.className = 'text-danger d-block mt-2';
+            
+            // 创建连接信息区
+            statusInfo.innerHTML = '';
+            const connectionInfo = document.createElement('div');
+            connectionInfo.className = 'llm-connection-info';
+            
+            // 创建状态图标
+            const statusIcon = document.createElement('span');
+            statusIcon.className = 'status-icon bi bi-x-circle-fill text-danger';
+            connectionInfo.appendChild(statusIcon);
+            
+            // 创建状态文本
+            const statusText = document.createElement('span');
+            statusText.className = 'text-danger';
+            statusText.textContent = `连接错误: ${error.message}`;
+            connectionInfo.appendChild(statusText);
+            
+            // 添加到状态信息元素
+            statusInfo.appendChild(connectionInfo);
+            
+            // 添加故障排除提示
+            const errorDetails = document.createElement('div');
+            errorDetails.className = 'mt-2 small text-muted';
+            errorDetails.innerHTML = `
+                <p>可能的原因:</p>
+                <ul class="ps-3 mb-0">
+                    <li>Ollama服务未启动</li>
+                    <li>网络连接问题</li>
+                    <li>API端点或端口配置错误</li>
+                </ul>
+            `;
+            statusInfo.appendChild(errorDetails);
             
             console.error('测试LLM连接失败:', error);
             showToast(`LLM连接错误: ${error.message}`, 'error');
