@@ -1549,8 +1549,16 @@ class App {
     }
 }
 
+// 获取LLMLogger
+import { LLMLogger } from './services/llmService.js';
+
 // 初始化应用
 const app = new App();
 document.addEventListener('DOMContentLoaded', () => {
+    // 初始化日志记录器
+    LLMLogger.init();
+    console.log('LLM日志记录器已初始化');
+    
+    // 初始化应用
     app.initialize();
 });

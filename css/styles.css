@@ -558,6 +558,53 @@ button:active {
   display: none;
 }
 
+/* LLM日志区域样式 */
+.llm-log-container {
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  padding: 6px;
+}
+
+.log-area {
+  height: 120px;
+  overflow-y: auto;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  color: #333;
+}
+
+.log-entry {
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px dotted #ddd;
+}
+
+.log-time {
+  color: #6c757d;
+  margin-right: 6px;
+}
+
+.log-info {
+  color: #0d6efd;
+}
+
+.log-error {
+  color: #dc3545;
+}
+
+.log-success {
+  color: #198754;
+}
+
+.log-warning {
+  color: #ffc107;
+}
+
 /* 空消息样式 */
 .empty-message {
   text-align: center;
