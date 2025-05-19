@@ -6,7 +6,7 @@
 export class LLMService {
     constructor() {
         this.apiEndpoint = 'http://localhost:11434/api/generate';
-        this.model = 'llama3.2';
+        this.model = 'qwen3:8b';
         this.connectionTested = false;
     }
     
