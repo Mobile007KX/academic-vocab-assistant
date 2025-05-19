@@ -126,24 +126,52 @@ export class TextProcessor {
             // 提取JSON并生成HTML
             let wordData;
             try {
-                // 尝试提取JSON内容
-                const jsonMatch = content.match(/```json([\s\S]*?)```/) || 
-                                  content.match(/\{([\s\S]*?)\}/);
-                                  
-                if (jsonMatch) {
-                    // 获取JSON字符串并解析
-                    const jsonStr = jsonMatch[0].startsWith('{') ? jsonMatch[0] : jsonMatch[1];
-                    wordData = JSON.parse(jsonStr.startsWith('{') ? jsonStr : '{' + jsonStr + '}');
+                console.log(`原始内容(前100字符): ${content.substring(0, 100)}...`);
+                
+                // 尝试多种方式提取JSON
+                let jsonStr = null;
+                
+                // 方法1: 寻找```json```块
+                const codeBlockMatch = content.match(/```(?:json)?([\s\S]*?)```/);
+                if (codeBlockMatch) {
+                    jsonStr = codeBlockMatch[1].trim();
+                    console.log('从代码块中提取JSON成功');
+                }
+                
+                // 方法2: 尝试查找完整的JSON对象
+                if (!jsonStr) {
+                    // 寻找最外层的大括号包含的内容
+                    const jsonObjectMatch = content.match(/\{([\s\S]*?)\}(?=[^{}]*$)/);
+                    if (jsonObjectMatch) {
+                        jsonStr = '{' + jsonObjectMatch[1] + '}';
+                        console.log('从内容中提取完整JSON对象成功');
+                    }
+                }
+                
+                // 方法3: 尝试将整个内容解析为JSON
+                if (!jsonStr && content.trim().startsWith('{') && content.trim().endsWith('}')) {
+                    jsonStr = content.trim();
+                    console.log('使用完整内容作为JSON');
+                }
+                
+                // 如果找到了JSON字符串，尝试清理和解析
+                if (jsonStr) {
+                    // 清理JSON字符串，移除不必要的引号和转义
+                    jsonStr = jsonStr.replace(/\\n/g, '\n')
+                                     .replace(/\\\//g, '/');
+                                     
+                    console.log(`尝试解析JSON: ${jsonStr.substring(0, 50)}...`);
+                    try {
+                        wordData = JSON.parse(jsonStr);
+                        console.log('JSON解析成功');
+                    } catch (parseError) {
+                        console.error(`JSON解析失败: ${parseError.message}, 尝试其他方法`);
+                        throw parseError; // 将错误传递给外层catch块
+                    }
                 } else {
-                    // 如果没有找到JSON，使用旧处理方法
+                    // 没有找到JSON
                     console.warn(`未找到词汇 ${word} 的JSON格式，回退到文本处理...`);
-                    const formattedContent = this.processTriModeResponse(content, word);
-                    return {
-                        word,
-                        content: formattedContent,
-                        mode: 'tri-mode',
-                        timestamp: new Date().toISOString()
-                    };
+                    throw new Error('未找到有效的JSON格式');
                 }
                 
                 // 从JSON生成HTML
@@ -264,9 +292,9 @@ export class TextProcessor {
     getTriModePromptForJson(word) {
         return `
         请为学术词汇"${word}"创建一个结构化的JSON格式词条，包含三种不同的展示模式。
-        直接返回符合以下结构的JSON数据，并用```json和```包裹，不要包含任何额外的解释、想法或思考过程。
+        只返回格式正确的JSON数据，不要添加任何解释或思考过程。
+        确保JSON格式完全正确，避免任何格式错误。格式必须完全匹配以下结构：
         
-        ```json
         {
           "word": "${word}",
           "modes": {
@@ -321,10 +349,14 @@ export class TextProcessor {
             }
           }
         }
-        ```
         
-        请确保JSON格式完全正确，字段名称与示例完全一致，字段值应详尽完整。绝不要在JSON外返回任何说明、注解或分析。
-        所有字段必须有实质性内容，不要使用占位符或简单标记。
+        重要提示：
+        1. 必须保持严格的JSON格式，确保所有逗号、引号和括号正确。
+        2. 字符串值必须用双引号包围，不要使用单引号。
+        3. 不要在JSON数据前后添加任何说明文字或代码块标记，直接返回纯JSON。
+        4. 确保所有字段名称准确一致，大小写与示例完全匹配。
+        5. 提供真实有用的内容，不要使用占位符。
+        6. 所有引号、括号和特殊字符必须正确转义。
         `;
     }
     
@@ -548,5 +580,297 @@ export class TextProcessor {
         }
         
         return formatted;
+    }
+    
+    /**
+     * 从文本内容中提取专业模式数据
+     * @param {string} content - LLM返回的内容
+     * @param {string} word - 词汇
+     * @returns {Object} 提取的结构化数据
+     */
+    extractProfessionalMode(content, word) {
+        try {
+            // 如果内容包含模式分隔符，尝试提取第一个模式
+            let professionalContent = content;
+            if (content.includes('###MODE_SEPARATOR')) {
+                const parts = content.split('###MODE_SEPARATOR');
+                professionalContent = parts[0];
+            }
+            
+            // 提取定义
+            const definitionMatch = professionalContent.match(/Definition:([^\n]*)/i) || 
+                                   professionalContent.match(/🧠([^\n]*)/i);
+            const definition = definitionMatch ? definitionMatch[1].trim() : '';
+            
+            // 提取发音
+            const pronunciationMatch = professionalContent.match(/Pronunciation:([^\n]*)/i) || 
+                                      professionalContent.match(/🔊([^\n]*)/i);
+            const pronunciation = pronunciationMatch ? pronunciationMatch[1].trim() : '';
+            
+            // 提取学术用法例句
+            const academicUsage = this.extractListItems(professionalContent, 'Academic Usage', '🎯');
+            
+            // 提取日常用法例句
+            const everydayUse = this.extractListItems(professionalContent, 'Everyday Use', '💬');
+            
+            // 提取相关词汇
+            const vocabularyMatch = professionalContent.match(/Associated Academic Vocabulary:([^\n]*)/i) || 
+                                   professionalContent.match(/🔗([^\n]*)/i);
+            const associatedVocabulary = vocabularyMatch ? 
+                vocabularyMatch[1].trim().split(/[,，、]/).map(w => w.trim()).filter(w => w) : [];
+            
+            // 提取语法点
+            const grammar = this.extractListItems(professionalContent, 'Grammar & Usage', '🧭');
+            
+            // 提取搭配
+            const collocations = {};
+            const collocationMatches = [...professionalContent.matchAll(/• ([^:]+): ([^\n]*)/g)];
+            collocationMatches.forEach(match => {
+                if (match[1] && match[2]) {
+                    collocations[match[1].trim()] = match[2].trim();
+                }
+            });
+            
+            // 提取同义词
+            const synonyms = [];
+            const synonymMatches = [...professionalContent.matchAll(/• ([^(]+) \(([^)]+)\)/g)];
+            synonymMatches.forEach(match => {
+                if (match[1] && match[2]) {
+                    synonyms.push({
+                        word: match[1].trim(),
+                        explanation: match[2].trim()
+                    });
+                }
+            });
+            
+            // 提取反义词
+            const antonyms = [];
+            const antonymMatches = [...professionalContent.matchAll(/• ([^(]+) \(([^)]+)\)/g)];
+            antonymMatches.forEach(match => {
+                if (match[1] && match[2] && 
+                    (professionalContent.includes('Antonyms') || professionalContent.includes('🚫'))) {
+                    antonyms.push({
+                        word: match[1].trim(),
+                        explanation: match[2].trim()
+                    });
+                }
+            });
+            
+            return {
+                title: word,
+                definition,
+                pronunciation,
+                academicUsage,
+                everydayUse,
+                associatedVocabulary,
+                grammar,
+                collocations,
+                synonyms,
+                antonyms
+            };
+        } catch (error) {
+            console.error('提取专业模式数据失败:', error);
+            return { title: word };
+        }
+    }
+    
+    /**
+     * 从文本内容中提取中级模式数据
+     * @param {string} content - LLM返回的内容
+     * @param {string} word - 词汇
+     * @returns {Object} 提取的结构化数据
+     */
+    extractIntermediateMode(content, word) {
+        try {
+            // 如果内容包含模式分隔符，尝试提取第二个模式
+            let intermediateContent = content;
+            if (content.includes('###MODE_SEPARATOR')) {
+                const parts = content.split('###MODE_SEPARATOR');
+                intermediateContent = parts.length > 1 ? parts[1] : content;
+            }
+            
+            // 提取定义
+            const definitionMatch = intermediateContent.match(/定义:([^\n]*)/i) || 
+                                   intermediateContent.match(/🧠([^\n]*)/i);
+            const definition = definitionMatch ? definitionMatch[1].trim() : '';
+            
+            // 提取发音
+            const pronunciationMatch = intermediateContent.match(/发音:([^\n]*)/i) || 
+                                      intermediateContent.match(/🔊([^\n]*)/i);
+            const pronunciation = pronunciationMatch ? pronunciationMatch[1].trim() : '';
+            
+            // 提取学术用法例句
+            const academicUsage = this.extractListItems(intermediateContent, '学术用法', '🎯');
+            
+            // 提取日常用法例句
+            const everydayUse = this.extractListItems(intermediateContent, '日常用法', '💬');
+            
+            // 提取相关词汇
+            const associatedVocabulary = [];
+            const vocabularyMatch = intermediateContent.match(/相关学术词汇:([^\n]*)/i) || 
+                                   intermediateContent.match(/🔗([^\n]*)/i);
+            if (vocabularyMatch) {
+                const vocabText = vocabularyMatch[1].trim();
+                const vocabItems = vocabText.split(/[,，、]/);
+                vocabItems.forEach(item => {
+                    const parts = item.trim().match(/([^(]+)\(([^)]+)\)/i);
+                    if (parts) {
+                        associatedVocabulary.push({
+                            en: parts[1].trim(),
+                            zh: parts[2].trim()
+                        });
+                    } else {
+                        associatedVocabulary.push({
+                            en: item.trim(),
+                            zh: ''
+                        });
+                    }
+                });
+            }
+            
+            // 提取语法点
+            const grammar = this.extractListItems(intermediateContent, '语法与用法', '🧭');
+            
+            // 提取搭配
+            const collocations = {};
+            const collocationMatches = [...intermediateContent.matchAll(/• ([^:]+): ([^\n]*)/g)];
+            collocationMatches.forEach(match => {
+                if (match[1] && match[2]) {
+                    collocations[match[1].trim()] = match[2].trim();
+                }
+            });
+            
+            // 提取同义词
+            const synonyms = [];
+            const synonymMatches = [...intermediateContent.matchAll(/• ([^(]+) \(([^)]+)\)/g)];
+            synonymMatches.forEach(match => {
+                if (match[1] && match[2] && 
+                    (intermediateContent.includes('同义词') || intermediateContent.includes('📝'))) {
+                    synonyms.push({
+                        word: match[1].trim(),
+                        explanation: match[2].trim()
+                    });
+                }
+            });
+            
+            return {
+                title: word,
+                definition,
+                pronunciation,
+                academicUsage,
+                everydayUse,
+                associatedVocabulary,
+                grammar,
+                collocations,
+                synonyms
+            };
+        } catch (error) {
+            console.error('提取中级模式数据失败:', error);
+            return { title: word };
+        }
+    }
+    
+    /**
+     * 从文本内容中提取初级模式数据
+     * @param {string} content - LLM返回的内容
+     * @param {string} word - 词汇
+     * @returns {Object} 提取的结构化数据
+     */
+    extractElementaryMode(content, word) {
+        try {
+            // 如果内容包含模式分隔符，尝试提取第三个模式
+            let elementaryContent = content;
+            if (content.includes('###MODE_SEPARATOR')) {
+                const parts = content.split('###MODE_SEPARATOR');
+                elementaryContent = parts.length > 2 ? parts[2] : content;
+            }
+            
+            // 提取定义
+            const definitionMatch = elementaryContent.match(/意思:([^\n]*)/i) || 
+                                   elementaryContent.match(/🧠([^\n]*)/i);
+            const definition = definitionMatch ? definitionMatch[1].trim() : '';
+            
+            // 提取发音
+            const pronunciationMatch = elementaryContent.match(/怎么读:([^\n]*)/i) || 
+                                      elementaryContent.match(/🔊([^\n]*)/i);
+            const pronunciation = pronunciationMatch ? pronunciationMatch[1].trim() : '';
+            
+            // 提取用法例句
+            const usage = this.extractListItems(elementaryContent, '怎么用', '🎯');
+            
+            // 提取相关词汇
+            const relatedWordsMatch = elementaryContent.match(/相关词汇:([^\n]*)/i) || 
+                                     elementaryContent.match(/🔗([^\n]*)/i);
+            const relatedWords = relatedWordsMatch ? relatedWordsMatch[1].trim() : '';
+            
+            // 提取小贴士
+            const tipsMatch = elementaryContent.match(/小贴士:([^\n]*)/i) || 
+                              elementaryContent.match(/🧭([^\n]*)/i);
+            const tips = tipsMatch ? tipsMatch[1].trim() : '';
+            
+            // 提取类似词
+            const similarWords = [];
+            const similarMatches = [...elementaryContent.matchAll(/• ([^(]+) \(([^)]+)\)/g)];
+            similarMatches.forEach(match => {
+                if (match[1] && match[2] && 
+                    (elementaryContent.includes('类似的词') || elementaryContent.includes('📝'))) {
+                    similarWords.push({
+                        word: match[1].trim(),
+                        explanation: match[2].trim()
+                    });
+                }
+            });
+            
+            return {
+                title: word,
+                definition,
+                pronunciation,
+                usage,
+                relatedWords,
+                tips,
+                similarWords
+            };
+        } catch (error) {
+            console.error('提取初级模式数据失败:', error);
+            return { title: word };
+        }
+    }
+    
+    /**
+     * 从文本中提取列表项
+     * @param {string} content - 文本内容
+     * @param {string} sectionName - 章节名称
+     * @param {string} emoji - 章节对应的emoji
+     * @returns {Array} 提取的列表项
+     */
+    extractListItems(content, sectionName, emoji) {
+        const items = [];
+        
+        // 根据章节名称或emoji定位章节
+        let sectionContent = '';
+        const sectionRegex = new RegExp(`${sectionName}:[^\n]*|${emoji}[^\n]*`, 'i');
+        const sectionMatch = content.match(sectionRegex);
+        
+        if (sectionMatch) {
+            // 找到章节开始位置
+            const startIndex = content.indexOf(sectionMatch[0]);
+            if (startIndex !== -1) {
+                // 章节内容是从章节标题开始到下一个emoji章节或文档结束
+                const restContent = content.substring(startIndex + sectionMatch[0].length);
+                const nextEmojiMatch = restContent.match(/[\p{Emoji}\p{Emoji_Presentation}][^:\n]*:/u);
+                const endIndex = nextEmojiMatch ? restContent.indexOf(nextEmojiMatch[0]) : restContent.length;
+                sectionContent = restContent.substring(0, endIndex).trim();
+                
+                // 提取列表项
+                const listMatches = [...sectionContent.matchAll(/• ([^\n]+)/g)];
+                listMatches.forEach(match => {
+                    if (match[1]) {
+                        items.push(match[1].trim());
+                    }
+                });
+            }
+        }
+        
+        return items;
     }
 }

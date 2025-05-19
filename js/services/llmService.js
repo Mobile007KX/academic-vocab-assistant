@@ -69,12 +69,24 @@ export class LLMService {
                 }
             }
             
-            const response = await fetch(this.apiEndpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
+            console.log(`向模型 ${this.model} 发送查询...`);
+            console.log(`API端点: ${this.apiEndpoint}`);
+            
+            // 根据API端点路径判断使用哪种API格式
+            const isCompletionAPI = this.apiEndpoint.includes('generate') || 
+                                    this.apiEndpoint.includes('completions');
+            
+            let requestBody;
+            if (isCompletionAPI) {
+                console.log('使用Completions API格式');
+                requestBody = {
+                    model: this.model,
+                    prompt: prompt,
+                    stream: false
+                };
+            } else {
+                console.log('使用Chat API格式');
+                requestBody = {
                     model: this.model,
                     messages: [
                         {
@@ -83,15 +95,48 @@ export class LLMService {
                         }
                     ],
                     stream: false
-                })
+                };
+            }
+            
+            console.log(`请求体: ${JSON.stringify(requestBody).substring(0, 200)}...`);
+            
+            // 设置超时
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+            
+            const response = await fetch(this.apiEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
             });
+            
+            // 清除超时计时器
+            clearTimeout(timeoutId);
             
             if (!response.ok) {
                 throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
             }
             
             const data = await response.json();
-            return data.message?.content || '';
+            console.log(`响应数据结构: ${JSON.stringify(Object.keys(data))}`);
+            
+            let content = '';
+            if (isCompletionAPI) {
+                content = data.response || data.choices?.[0]?.text || data.output || data.completion || '';
+            } else {
+                content = data.message?.content || data.choices?.[0]?.message?.content || data.content || '';
+            }
+            
+            if (!content) {
+                console.warn('API响应中未找到内容，返回原始响应数据');
+                return JSON.stringify(data);
+            }
+            
+            console.log(`获取到响应(前50字符): ${content.substring(0, 50)}...`);
+            return content;
         } catch (error) {
             console.error('查询LLM失败:', error);
             throw error;

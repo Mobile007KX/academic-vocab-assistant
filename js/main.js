@@ -728,6 +728,9 @@ class App {
                 llmConnectionStatus.textContent = `已成功连接到 ${this.llmService.model} 模型`;
                 llmConnectionStatus.className = 'text-success d-block mt-2';
                 console.log('LLM连接测试成功');
+                
+                // 添加一个简单的模型测试，确保返回格式正确
+                this.testLLMFormatting();
             } else {
                 // 更新状态显示为未连接
                 llmStatusEl.className = 'badge bg-danger';
@@ -760,6 +763,68 @@ class App {
             
             console.error('测试LLM连接失败:', error);
             showToast(`LLM连接错误: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * 测试LLM是否能够返回正确格式的JSON
+     */
+    async testLLMFormatting() {
+        try {
+            // 使用一个简单的单词测试JSON格式返回
+            console.log('正在进行LLM格式兼容性测试...');
+            const testPrompt = this.textProcessor.getTriModePromptForJson('test');
+            const testResponse = await this.llmService.query(testPrompt);
+            
+            // 检查返回是否包含JSON
+            console.log('测试响应(前100字符):', testResponse.substring(0, 100));
+            
+            // 尝试提取JSON
+            let jsonFound = false;
+            let validJson = false;
+            
+            // 尝试寻找代码块格式的JSON
+            if (testResponse.includes('```json') && testResponse.includes('```')) {
+                jsonFound = true;
+                try {
+                    const jsonMatch = testResponse.match(/```json([\s\S]*?)```/);
+                    if (jsonMatch && jsonMatch[1]) {
+                        JSON.parse(jsonMatch[1].trim());
+                        validJson = true;
+                        console.log('模型能够返回代码块格式的有效JSON');
+                    }
+                } catch (e) {
+                    console.warn('模型返回的JSON格式有问题:', e.message);
+                }
+            } 
+            // 尝试寻找大括号格式的JSON
+            else if (testResponse.includes('{') && testResponse.includes('}')) {
+                jsonFound = true;
+                try {
+                    const jsonMatch = testResponse.match(/\{([\s\S]*?)\}/);
+                    if (jsonMatch && jsonMatch[0]) {
+                        JSON.parse(jsonMatch[0]);
+                        validJson = true;
+                        console.log('模型能够返回大括号格式的有效JSON');
+                    }
+                } catch (e) {
+                    console.warn('模型返回的JSON格式有问题:', e.message);
+                }
+            }
+            
+            // 根据测试结果进行提示
+            if (!jsonFound) {
+                console.warn('模型响应中未找到JSON格式的内容');
+                showToast('警告: 模型可能无法正确返回JSON格式数据，词条生成可能受影响', 'warning');
+            } else if (!validJson) {
+                console.warn('模型返回JSON格式无效');
+                showToast('警告: 模型返回的JSON格式有问题，将尝试使用备用解析方式', 'warning');
+            } else {
+                console.log('LLM格式兼容性测试通过');
+            }
+        } catch (error) {
+            console.error('LLM格式测试失败:', error);
+            showToast('无法验证模型的JSON格式返回能力，可能影响词条生成', 'warning');
         }
     }
     
@@ -814,6 +879,11 @@ class App {
             }
             
             // 处理每个词汇
+            let successCount = 0;
+            let failCount = 0;
+            const retryMode = [];
+            
+            // 第一轮处理 - 使用JSON模式
             for (let i = 0; i < newWords.length; i++) {
                 const word = newWords[i];
                 const progress = ((i + 1) / newWords.length * 100).toFixed(0);
@@ -821,24 +891,76 @@ class App {
                 document.getElementById('progressStatus').textContent = `正在处理: ${word} (${i + 1}/${newWords.length})`;
                 
                 try {
+                    console.log(`处理词汇 ${word}`);
                     const result = await this.textProcessor.processWord(word, this.currentMode);
                     
                     if (autoSave && result && result.content) {
+                        if (result.content.includes('处理词汇') && result.content.includes('失败')) {
+                            console.warn(`词汇 ${word} 处理结果异常，将使用备用模式重试`);
+                            retryMode.push(word);
+                            continue;
+                        }
+                        
                         this.dictionaryManager.addWord({
                             word: word,
                             content: result.content,
                             mode: this.currentMode
                         });
+                        successCount++;
+                    } else {
+                        console.warn(`词汇 ${word} 缺少内容，将使用备用模式重试`);
+                        retryMode.push(word);
                     }
                     
                 } catch (wordError) {
                     console.error(`处理词汇 ${word} 失败:`, wordError);
+                    retryMode.push(word);
+                }
+            }
+            
+            // 第二轮处理 - 使用备用模式
+            if (retryMode.length > 0) {
+                console.log(`有 ${retryMode.length} 个词汇需要使用备用模式重试`);
+                showToast(`正在使用备用模式重试 ${retryMode.length} 个词汇...`, 'info');
+                
+                for (let i = 0; i < retryMode.length; i++) {
+                    const word = retryMode[i];
+                    const progress = ((i + 1) / retryMode.length * 100).toFixed(0);
+                    document.getElementById('progressBar').style.width = `${progress}%`;
+                    document.getElementById('progressStatus').textContent = `备用模式处理: ${word} (${i + 1}/${retryMode.length})`;
+                    
+                    try {
+                        // 使用老式的纯文本模式处理
+                        const prompt = this.textProcessor.getTriModePrompt(word); // 使用非JSON格式的提示
+                        const content = await this.llmService.query(prompt);
+                        
+                        if (content && content.length > 0) {
+                            // 直接使用文本处理方式生成HTML
+                            const formattedContent = this.textProcessor.processTriModeResponse(content, word);
+                            
+                            this.dictionaryManager.addWord({
+                                word: word,
+                                content: formattedContent,
+                                mode: 'tri-mode'
+                            });
+                            successCount++;
+                        } else {
+                            failCount++;
+                        }
+                    } catch (retryError) {
+                        console.error(`备用模式处理词汇 ${word} 也失败:`, retryError);
+                        failCount++;
+                    }
                 }
             }
             
             // 完成
-            showToast(`成功处理 ${newWords.length} 个词汇`, 'success');
-            document.getElementById('progressStatus').textContent = `已完成处理 ${newWords.length} 个词汇`;
+            const resultText = failCount > 0 ? 
+                `处理完成：成功 ${successCount} 个词汇，失败 ${failCount} 个词汇` : 
+                `成功处理 ${successCount} 个词汇`;
+                
+            showToast(resultText, failCount > 0 ? 'warning' : 'success');
+            document.getElementById('progressStatus').textContent = resultText;
             
         } catch (error) {
             console.error('处理文本失败:', error);
