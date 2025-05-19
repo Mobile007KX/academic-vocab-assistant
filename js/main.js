@@ -210,8 +210,7 @@ class App {
         // 处理按钮点击
         document.getElementById('processButton').addEventListener('click', () => this.startProcessing());
         
-        // 测试日志按钮
-        document.getElementById('testLog').addEventListener('click', () => this.addTestLogs());
+        // 移除测试日志按钮引用，因为HTML中已经删除了该按钮
         
         // 清空输入按钮
         document.getElementById('clearInput').addEventListener('click', () => this.clearInput());
@@ -1052,12 +1051,14 @@ class App {
                 return;
             }
             
-            // 处理每个词汇
+            // 针对Qwen模型优化: 严格串行处理词汇，确保每次只处理一个词汇
+            showToast(`开始处理${newWords.length}个词汇，每次只处理一个...`, 'info');
+            
+            // 处理词汇
             let successCount = 0;
             let failCount = 0;
-            const retryMode = [];
             
-            // 第一轮处理 - 使用JSON模式
+            // 第一轮处理 - 使用简化JSON模式
             for (let i = 0; i < newWords.length; i++) {
                 const word = newWords[i];
                 const progress = ((i + 1) / newWords.length * 100).toFixed(0);
@@ -1065,13 +1066,18 @@ class App {
                 document.getElementById('progressStatus').textContent = `正在处理: ${word} (${i + 1}/${newWords.length})`;
                 
                 try {
-                    console.log(`处理词汇 ${word}`);
+                    console.log(`处理词汇: ${word}`);
+                    
+                    // 每次处理前增加延迟，确保模型完全重置
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // 使用简化的JSON格式处理词汇
                     const result = await this.textProcessor.processWord(word, this.currentMode);
                     
                     if (autoSave && result && result.content) {
                         if (result.content.includes('处理词汇') && result.content.includes('失败')) {
                             console.warn(`词汇 ${word} 处理结果异常，将使用备用模式重试`);
-                            retryMode.push(word);
+                            failCount++;
                             continue;
                         }
                         
@@ -1081,50 +1087,19 @@ class App {
                             mode: this.currentMode
                         });
                         successCount++;
+                        
+                        // 添加延迟，让模型有充分的冷却时间
+                        await new Promise(resolve => setTimeout(resolve, 1500));
                     } else {
-                        console.warn(`词汇 ${word} 缺少内容，将使用备用模式重试`);
-                        retryMode.push(word);
+                        console.warn(`词汇 ${word} 缺少内容，标记为失败`);
+                        failCount++;
                     }
                     
                 } catch (wordError) {
                     console.error(`处理词汇 ${word} 失败:`, wordError);
-                    retryMode.push(word);
-                }
-            }
-            
-            // 第二轮处理 - 使用备用模式
-            if (retryMode.length > 0) {
-                console.log(`有 ${retryMode.length} 个词汇需要使用备用模式重试`);
-                showToast(`正在使用备用模式重试 ${retryMode.length} 个词汇...`, 'info');
-                
-                for (let i = 0; i < retryMode.length; i++) {
-                    const word = retryMode[i];
-                    const progress = ((i + 1) / retryMode.length * 100).toFixed(0);
-                    document.getElementById('progressBar').style.width = `${progress}%`;
-                    document.getElementById('progressStatus').textContent = `备用模式处理: ${word} (${i + 1}/${retryMode.length})`;
-                    
-                    try {
-                        // 使用老式的纯文本模式处理
-                        const prompt = this.textProcessor.getTriModePrompt(word); // 使用非JSON格式的提示
-                        const content = await this.llmService.query(prompt);
-                        
-                        if (content && content.length > 0) {
-                            // 直接使用文本处理方式生成HTML
-                            const formattedContent = this.textProcessor.processTriModeResponse(content, word);
-                            
-                            this.dictionaryManager.addWord({
-                                word: word,
-                                content: formattedContent,
-                                mode: 'tri-mode'
-                            });
-                            successCount++;
-                        } else {
-                            failCount++;
-                        }
-                    } catch (retryError) {
-                        console.error(`备用模式处理词汇 ${word} 也失败:`, retryError);
-                        failCount++;
-                    }
+                    failCount++;
+                    // 错误后额外等待时间
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                 }
             }
             

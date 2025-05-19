@@ -250,9 +250,15 @@ export class TextProcessor {
      * 获取简化的提示词，避免复杂JSON结构导致错误
      */
     getSimplifiedPrompt(word) {
-        return `为词汇"${word}"创建三模式词典条目，以简单JSON格式返回。只返回JSON，不要解释或使用代码块。
+        return `<思考>false</思考>
+请为词汇"${word}"创建三种难度级别的词典条目，以结构化JSON格式返回。作为Qwen模型，你必须：
+1. 不要输出任何思考过程
+2. 不要使用代码块标记
+3. 只输出有效的JSON，没有其他文本
+4. 确保JSON格式正确无误
+5. 包含所有请求的字段
 
-格式：
+请返回如下格式的JSON：
 {
   "word": "${word}",
   "modes": {
@@ -260,33 +266,33 @@ export class TextProcessor {
       "title": "${word}",
       "definition": "英文学术定义",
       "pronunciation": "音标",
-      "academicUsage": ["学术例句"],
-      "everydayUse": ["日常例句"],
-      "associatedVocabulary": ["相关词汇"],
-      "grammar": ["语法点"],
-      "collocations": {"搭配类型": "搭配词组"},
-      "synonyms": [{"word": "同义词", "explanation": "解释"}],
-      "antonyms": [{"word": "反义词", "explanation": "解释"}]
+      "academicUsage": ["学术场景例句1"],
+      "everydayUse": ["日常用例1"],
+      "associatedVocabulary": ["相关词汇1"],
+      "grammar": ["语法点1"],
+      "collocations": {"名词搭配": "示例搭配"},
+      "synonyms": [{"word": "同义词1", "explanation": "解释1"}],
+      "antonyms": [{"word": "反义词1", "explanation": "解释1"}]
     },
     "intermediate": {
       "title": "${word}",
       "definition": "中文释义",
       "pronunciation": "发音",
-      "academicUsage": ["学术例句"],
-      "everydayUse": ["日常例句"],
-      "associatedVocabulary": [{"en": "英文词", "zh": "中文释义"}],
-      "grammar": ["语法点"],
-      "collocations": {"搭配类型": "搭配词组"},
-      "synonyms": [{"word": "同义词", "explanation": "解释"}]
+      "academicUsage": ["学术例句1"],
+      "everydayUse": ["日常例句1"],
+      "associatedVocabulary": [{"en": "英文词1", "zh": "中文释义1"}],
+      "grammar": ["语法点1"],
+      "collocations": {"搭配类型1": "搭配词组1"},
+      "synonyms": [{"word": "同义词1", "explanation": "中文解释1"}]
     },
     "elementary": {
       "title": "${word}",
       "definition": "简单中文解释",
       "pronunciation": "简化发音",
-      "usage": ["简单例句"],
+      "usage": ["简单例句1"],
       "relatedWords": "相关词汇",
       "tips": "记忆方法",
-      "similarWords": [{"word": "简单同义词", "explanation": "解释"}]
+      "similarWords": [{"word": "简单同义词1", "explanation": "解释1"}]
     }
   }
 }`;
