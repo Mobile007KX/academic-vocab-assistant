@@ -72,9 +72,19 @@ export class UIManager {
             return;
         }
         
-        // 移除hidden类显示模态窗口和遮罩层
+        // 确保模态窗口正确显示（移除hidden类并显式设置style.display）
         this.wordDetailModal.classList.remove('hidden');
         this.overlay.classList.remove('hidden');
+        
+        // 明确设置显示样式
+        this.wordDetailModal.style.display = 'block';
+        this.overlay.style.display = 'block';
+        
+        // 设置z-index确保模态窗口在最前面
+        this.wordDetailModal.style.zIndex = '1050';
+        this.overlay.style.zIndex = '1040';
+        
+        console.log('打开词汇详情模态窗口');
         
         // 添加事件监听，点击遮罩层时关闭模态窗口
         const self = this;
@@ -101,8 +111,21 @@ export class UIManager {
      */
     hideWordDetailModal() {
         if (this.wordDetailModal && this.overlay) {
+            // 添加hidden类
             this.wordDetailModal.classList.add('hidden');
             this.overlay.classList.add('hidden');
+            
+            // 显式设置display为none
+            this.wordDetailModal.style.display = 'none';
+            this.overlay.style.display = 'none';
+            
+            console.log('关闭词汇详情模态窗口');
+            
+            // 清空内容以避免显示旧内容
+            const contentDiv = document.getElementById('wordDetailContent');
+            if (contentDiv) {
+                contentDiv.innerHTML = '';
+            }
         }
     }
     
@@ -312,15 +335,45 @@ export class UIManager {
     }
     
     /**
-     * 移除HTML标签
+     * 移除HTML标签，提取有意义的文本内容
      * @param {string} html - 包含HTML标签的字符串
      * @returns {string} 移除HTML标签后的字符串
      */
     stripHtml(html) {
         if (!html) return '';
-        const temp = document.createElement('div');
-        temp.innerHTML = html;
-        return temp.textContent || temp.innerText || '';
+        try {
+            // 创建临时DOM元素
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            
+            // 尝试提取定义内容（通常在第一个tab中）
+            let definitionText = '';
+            
+            // 寻找section-title后面的段落，通常包含定义
+            const definitionTitles = temp.querySelectorAll('.section-title');
+            for (let i = 0; i < definitionTitles.length; i++) {
+                const title = definitionTitles[i];
+                if (title.textContent.includes('Definition') || title.textContent.includes('定义') || title.textContent.includes('意思')) {
+                    // 找到定义标题，获取下一个元素（通常是段落）
+                    let nextElement = title.nextElementSibling;
+                    if (nextElement && nextElement.tagName === 'P') {
+                        definitionText = nextElement.textContent.trim();
+                        break;
+                    }
+                }
+            }
+            
+            // 如果找到了定义，返回定义
+            if (definitionText) {
+                return definitionText;
+            }
+            
+            // 如果没找到定义，返回所有内容的文本
+            return temp.textContent || temp.innerText || '';
+        } catch (e) {
+            console.error('提取HTML内容失败:', e);
+            return '词汇内容预览不可用';
+        }
     }
     
     /**

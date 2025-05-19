@@ -476,15 +476,45 @@ class App {
     }
     
     /**
-     * 移除HTML标签
+     * 移除HTML标签，提取有意义的文本内容
      * @param {string} html - 包含HTML标签的字符串
      * @returns {string} 移除HTML标签后的字符串
      */
     stripHtml(html) {
         if (!html) return '';
-        const temp = document.createElement('div');
-        temp.innerHTML = html;
-        return temp.textContent || temp.innerText || '';
+        try {
+            // 创建临时DOM元素
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            
+            // 尝试提取定义内容（通常在第一个tab中）
+            let definitionText = '';
+            
+            // 寻找section-title后面的段落，通常包含定义
+            const definitionTitles = temp.querySelectorAll('.section-title');
+            for (let i = 0; i < definitionTitles.length; i++) {
+                const title = definitionTitles[i];
+                if (title.textContent.includes('Definition') || title.textContent.includes('定义') || title.textContent.includes('意思')) {
+                    // 找到定义标题，获取下一个元素（通常是段落）
+                    let nextElement = title.nextElementSibling;
+                    if (nextElement && nextElement.tagName === 'P') {
+                        definitionText = nextElement.textContent.trim();
+                        break;
+                    }
+                }
+            }
+            
+            // 如果找到了定义，返回定义
+            if (definitionText) {
+                return definitionText;
+            }
+            
+            // 如果没找到定义，返回所有内容的文本
+            return temp.textContent || temp.innerText || '';
+        } catch (e) {
+            console.error('提取HTML内容失败:', e);
+            return '词汇内容预览不可用';
+        }
     }
     
     /**

@@ -659,3 +659,11 @@ button:active {
     width: 95%;
   }
 }
+
+/* 词汇列表时间列样式 */
+.word-list-table .word-time {
+  width: 100px;
+  font-size: 0.8rem;
+  color: #adb5bd;
+  text-align: center;
+}
