@@ -16,18 +16,35 @@ export const LLMLogger = {
     if (clearBtn) {
       clearBtn.addEventListener('click', () => this.clear());
     }
+    
+    // 添加初始状态日志
+    this.clear();
+    this.info('日志系统已初始化');
+    this.info('准备就绪，等待操作...');
+  },
+
+  // 确保日志元素存在
+  ensureLogElement() {
+    if (!this.logElement) {
+      this.logElement = document.getElementById('llmLogArea');
+      if (!this.logElement) {
+        console.warn('找不到日志元素，将使用控制台输出日志');
+        return false;
+      }
+    }
+    return true;
   },
   
   // 添加日志条目
   log(message, type = 'info') {
-    if (!this.logElement) {
+    // 确保日志元素存在
+    if (!this.ensureLogElement()) {
       this.init();
-    }
-    
-    if (!this.logElement) {
-      console.warn('日志元素未找到');
-      console.log(message);
-      return;
+      if (!this.ensureLogElement()) {
+        console.warn('无法找到或创建日志元素');
+        console.log(`[${type}] ${message}`);
+        return;
+      }
     }
     
     const now = new Date();
@@ -42,7 +59,7 @@ export const LLMLogger = {
     
     const msgSpan = document.createElement('span');
     msgSpan.className = `log-${type}`;
-    msgSpan.textContent = message;
+    msgSpan.textContent = ` ${message}`; // 添加空格使文本更清晰
     
     entry.appendChild(timeSpan);
     entry.appendChild(msgSpan);

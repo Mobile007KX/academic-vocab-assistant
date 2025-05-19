@@ -563,10 +563,16 @@ button:active {
   border-radius: 4px;
   background-color: #f8f9fa;
   padding: 6px;
+  margin-bottom: 15px;
+}
+
+.dark-theme .llm-log-container {
+  background-color: #2b3035;
+  border: 1px solid #495057;
 }
 
 .log-area {
-  height: 120px;
+  height: 150px;
   overflow-y: auto;
   background-color: #f8f9fa;
   border: 1px solid #dee2e6;
@@ -578,10 +584,20 @@ button:active {
   color: #333;
 }
 
+.dark-theme .log-area {
+  background-color: #212529;
+  border-color: #495057;
+  color: #e9ecef;
+}
+
 .log-entry {
   margin-bottom: 4px;
   padding-bottom: 4px;
   border-bottom: 1px dotted #ddd;
+}
+
+.dark-theme .log-entry {
+  border-bottom: 1px dotted #495057;
 }
 
 .log-time {
@@ -589,20 +605,40 @@ button:active {
   margin-right: 6px;
 }
 
+.dark-theme .log-time {
+  color: #adb5bd;
+}
+
 .log-info {
   color: #0d6efd;
+}
+
+.dark-theme .log-info {
+  color: #6ea8fe;
 }
 
 .log-error {
   color: #dc3545;
 }
 
+.dark-theme .log-error {
+  color: #ea868f;
+}
+
 .log-success {
   color: #198754;
 }
 
+.dark-theme .log-success {
+  color: #75b798;
+}
+
 .log-warning {
   color: #ffc107;
+}
+
+.dark-theme .log-warning {
+  color: #ffda6a;
 }
 
 /* 空消息样式 */
