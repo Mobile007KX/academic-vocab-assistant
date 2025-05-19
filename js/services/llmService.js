@@ -5,7 +5,7 @@
 
 export class LLMService {
     constructor() {
-        this.apiEndpoint = 'http://localhost:11434/api/generate';
+        this.apiEndpoint = 'http://localhost:11434';
         this.model = 'qwen3:8b';
         this.connectionTested = false;
     }
@@ -16,17 +16,36 @@ export class LLMService {
      */
     async testConnection() {
         try {
-            console.log(`测试连接到 ${this.model} 模型，API端点: ${this.apiEndpoint}`);
+            console.log(`测试连接到 ${this.model} 模型，基础URL: ${this.apiEndpoint}`);
+            
+            // 测试基础服务是否运行
+            try {
+                const baseResponse = await fetch(this.apiEndpoint, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000) // 3秒超时
+                });
+                
+                if (baseResponse.ok) {
+                    console.log('Ollama基础服务已连接');
+                } else {
+                    console.warn(`基础服务连接失败: ${baseResponse.status}`);
+                    return false;
+                }
+            } catch (baseError) {
+                console.error('连接基础服务失败:', baseError);
+                return false;
+            }
             
             // 使用简化的测试请求
+            const generateEndpoint = `${this.apiEndpoint}/api/generate`;
             const requestBody = {
                 model: this.model,
                 prompt: 'Hello',
                 stream: false
             };
             
-            console.log('发送测试请求...');
-            const response = await fetch(this.apiEndpoint, {
+            console.log(`发送测试请求到: ${generateEndpoint}`);
+            const response = await fetch(generateEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -69,19 +88,23 @@ export class LLMService {
             
             console.log(`向模型 ${this.model} 发送查询...`);
             
+            // 构建正确的API端点
+            const generateEndpoint = `${this.apiEndpoint}/api/generate`;
+            
             const requestBody = {
                 model: this.model,
                 prompt: prompt,
                 stream: false
             };
             
-            const response = await fetch(this.apiEndpoint, {
+            console.log(`发送请求到: ${generateEndpoint}`);
+            const response = await fetch(generateEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(requestBody),
-                signal: AbortSignal.timeout(30000) // 30秒超时
+                signal: AbortSignal.timeout(60000) // 60秒超时
             });
             
             if (!response.ok) {
